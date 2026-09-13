@@ -1,0 +1,69 @@
+# glucurvia · un solo compose para "producción personal" (iMac) y desarrollo (MacBook).
+# Día 1:  cp .env.example .env  →  docker compose up -d mongo nightscout postgres
+#         crear los tokens en http://localhost:1337 (Admin Tools), copiarlos al .env,
+#         docker compose up -d librelink-up  y comprobar que aparece la glucosa.
+# El servicio `api` se activa en la fase 1, cuando exista el proyecto Spring Boot y su Dockerfile.
+
+services:
+  mongo:
+    image: mongo:4.4                # versión ampliamente usada con Nightscout; verificar contra su documentación
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+
+  nightscout:
+    image: nightscout/cgm-remote-monitor:latest
+    restart: unless-stopped
+    depends_on: [mongo]
+    ports:
+      - "1337:1337"
+    environment:
+      MONGO_CONNECTION: mongodb://mongo:27017/nightscout
+      API_SECRET: ${NS_API_SECRET}
+      AUTH_DEFAULT_ROLES: denied    # nada es público; cada cliente usa su token (diseño, 4.4 y 13)
+      INSECURE_USE_HTTP: "true"     # sin TLS porque va detrás de Tailscale, nunca expuesto a internet
+      DISPLAY_UNITS: mg/dl
+      TIME_FORMAT: "24"
+      TZ: ${TZ}
+      ENABLE: careportal
+      NODE_ENV: production
+
+  librelink-up:
+    image: timoschlueter/nightscout-librelink-up:latest
+    restart: unless-stopped
+    depends_on: [nightscout]
+    environment:
+      LINK_UP_USERNAME: ${LINK_UP_USERNAME}
+      LINK_UP_PASSWORD: ${LINK_UP_PASSWORD}
+      LINK_UP_REGION: ${LINK_UP_REGION}
+      LINK_UP_TIME_INTERVAL: ${LINK_UP_TIME_INTERVAL}
+      # LINK_UP_VERSION: "4.x.x"    # solo si Abbott cambia de versión y el uploader lo pide
+      NIGHTSCOUT_URL: nightscout:1337
+      NIGHTSCOUT_DISABLE_HTTPS: "true"
+      NIGHTSCOUT_API_TOKEN: ${NIGHTSCOUT_API_TOKEN}
+      LOG_LEVEL: info
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: ${TZ}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  # api:
+  #   build: .
+  #   restart: unless-stopped
+  #   depends_on: [postgres, nightscout]
+  #   ports:
+  #     - "8080:8080"
+  #   env_file: .env
+
+volumes:
+  mongo-data:
+  postgres-data:
