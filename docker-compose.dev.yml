@@ -1,0 +1,18 @@
+# Postgres de desarrollo, uno por worktree (plan 6.1).
+# En el .env del worktree: COMPOSE_PROJECT_NAME=glucurvia-<módulo> y PG_PORT=<puerto libre>.
+# Levantar:  docker compose -f docker-compose.dev.yml up -d
+# Recrear (Flyway se queja del checksum tras reescribir una migración no mergeada):  docker compose -f docker-compose.dev.yml down -v
+name: ${COMPOSE_PROJECT_NAME:-glucurvia-dev}
+services:
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-glucurvia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-glucurvia}
+      POSTGRES_DB: ${POSTGRES_DB:-glucurvia}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

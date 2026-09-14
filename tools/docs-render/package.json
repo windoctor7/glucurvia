@@ -1,6 +1,0 @@
-{
-  "name": "docs-render",
-  "private": true,
-  "description": "Convierte docs/diseno-mvp.md en una página HTML (la que se publica como artefacto).",
-  "dependencies": { "marked": "^15.0.0" }
-}

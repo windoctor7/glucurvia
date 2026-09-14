@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.3</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>mx.glucurvia</groupId>
+  <artifactId>glucurvia</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>Glucurvia</name>
+  <description>Seguimiento metabólico conversacional para usuarios de CGM (uso personal)</description>
+
+  <!-- Este archivo lo edita solo el humano. Las versiones de librerías que usa un solo módulo
+       van en el pom de ese módulo; cuando las usan dos, suben aquí (plan, sección 4). -->
+
+  <properties>
+    <java.version>21</java.version>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <modules>
+    <module>glucurvia-core</module>
+    <module>glucurvia-core-testing</module>
+    <module>glucurvia-schema</module>
+    <module>glucurvia-cgm</module>
+    <module>glucurvia-glycemic</module>
+    <module>glucurvia-insights</module>
+    <module>glucurvia-journal</module>
+    <module>glucurvia-nutrition</module>
+    <module>glucurvia-assistant</module>
+    <module>glucurvia-api</module>
+  </modules>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>mx.glucurvia</groupId>
+        <artifactId>glucurvia-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>mx.glucurvia</groupId>
+        <artifactId>glucurvia-core-testing</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>mx.glucurvia</groupId>
+        <artifactId>glucurvia-schema</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <!-- Solo glucurvia-api declara el spring-boot-maven-plugin: es el único jar ejecutable. -->
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+    <plugins>
+      <!-- Formato único en las dos máquinas (plan 6.3): `./mvnw spotless:apply` antes de la PR; `verify` falla si no está formateado. -->
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>2.44.5</version>
+        <configuration>
+          <java>
+            <googleJavaFormat>
+              <version>1.27.0</version>
+            </googleJavaFormat>
+            <removeUnusedImports/>
+          </java>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <phase>verify</phase>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

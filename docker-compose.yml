@@ -1,7 +1,8 @@
 # glucurvia · un solo compose para "producción personal" (iMac) y desarrollo (MacBook).
-# Día 1:  cp .env.example .env  →  docker compose up -d mongo nightscout postgres
+# Día 1 (iMac):  cp .env.example .env  →  docker compose up -d mongo nightscout postgres
 #         crear los tokens en http://localhost:1337 (Admin Tools), copiarlos al .env,
-#         docker compose up -d librelink-up  y comprobar que aparece la glucosa.
+#         docker compose --profile prod up -d librelink-up  y comprobar que aparece la glucosa.
+# Desarrollo: usa docker-compose.dev.yml (solo Postgres, uno por worktree).
 # El servicio `api` se activa en la fase 1, cuando exista el proyecto Spring Boot y su Dockerfile.
 
 services:
@@ -32,6 +33,7 @@ services:
     image: timoschlueter/nightscout-librelink-up:latest
     restart: unless-stopped
     depends_on: [nightscout]
+    profiles: [prod]              # SOLO en el iMac: `docker compose --profile prod up -d`. Un segundo uploader en la MacBook no aporta nada.
     environment:
       LINK_UP_USERNAME: ${LINK_UP_USERNAME}
       LINK_UP_PASSWORD: ${LINK_UP_PASSWORD}

@@ -42,9 +42,9 @@ Se hace en una sola máquina, con una sola sesión de Claude Code y tú presente
 | # | Bloque | Cómo compruebas que está |
 |---|---|---|
 | 1 | `pom.xml` padre y los diez módulos vacíos; `api` arranca | `./mvnw -q verify` verde; `./mvnw -q -pl glucurvia-api spring-boot:run` y `curl localhost:8080/actuator/health` responde `UP` |
-| 2 | `core` con todos los contratos de la tabla 4.1 del plan; `core-testing` con fakes, tests de contrato y curvas de entrada | Abres `glucurvia-core` y encuentras cada puerto de la tabla; `./mvnw -q -pl glucurvia-core-testing -am verify` verde |
+| 2 | `core` con todos los contratos de la tabla 4.1 del plan; `core-testing` con fakes, tests de contrato y curvas de entrada | Abres `glucurvia-core` y encuentras cada adaptador de la tabla; `./mvnw -q -pl glucurvia-core-testing -am verify` verde |
 | 3 | `schema` con el baseline del diseño y `users` sembrado; Flyway con `outOfOrder` | Arrancas la app contra la base de desarrollo y `psql` muestra todas las tablas de la sección 3 del diseño |
-| 4 | Stubs en `api` | En el log de arranque aparece la lista de puertos en stub (todos, por ahora); con `SPRING_PROFILES_ACTIVE=prod` la app se niega a arrancar |
+| 4 | Stubs en `api` | En el log de arranque aparece la lista de adaptadores en stub (todos, por ahora); con `SPRING_PROFILES_ACTIVE=prod` la app se niega a arrancar |
 | 5 | `docs/api/openapi.yaml` y generación de tipos en `web` | `cd web && npm run gen` produce los tipos; el CI tiene el paso de deriva |
 | 6 | `docker-compose.dev.yml` por worktree; uploader bajo perfil `prod` | Dos carpetas con `.env` distintos levantan dos Postgres a la vez; `docker compose up -d` sin `--profile prod` no arranca el uploader |
 | 7 | `.sdkmanrc`, `.nvmrc`, `.editorconfig`, Spotless, Prettier | `./mvnw -q spotless:check` verde; `cd web && npm run lint` verde |
@@ -117,7 +117,7 @@ Cuántos a la vez: dos por máquina en la fase 1, tres en la fase 2. Si tienes m
 - [ ] `gh pr diff <n> --name-only`: **solo archivos de su módulo** (más su carpeta en `schema` si añade migración). Si toca `core`, `core-testing`, `openapi.yaml`, `api` o carpetas ajenas, se rechaza: eso va en una PR de contrato aparte.
 - [ ] Menos de 400 líneas sin contar archivos de datos. Si no, pide que la parta.
 - [ ] Hay tests nuevos para lo nuevo; ninguno usa la red.
-- [ ] Si implementa un puerto, extiende el `Abstract…Contract`.
+- [ ] Si implementa un adaptador, extiende el `Abstract…Contract`.
 - [ ] Pasada de `/code-review` hecha (tú o un agente) y sin hallazgos graves sin responder.
 
 Lo que no revisas: estilo (lo hace Spotless), nombres de variables, si tú lo habrías hecho distinto. Si funciona, está probado y respeta las fronteras, entra.
@@ -218,7 +218,7 @@ Cada viernes, cinco números:
 | PRs mergeadas en la semana | `gh pr list --state merged --search "merged:>=$(date -v-7d +%F)"` | entre 8 y 20; menos, los agentes se atascan; más, tú no estás revisando de verdad |
 | PRs abiertas más de dos días | `gh pr list --search "created:<$(date -v-2d +%F)"` | cero; una PR vieja es un agente bloqueado |
 | Contratos abiertos | `gh pr list --label contract` | cero al terminar el día |
-| Puertos en stub en producción | el log de arranque del iMac | baja cada semana hasta cero al final de la fase 2 |
+| Adaptadores en stub en producción | el log de arranque del iMac | baja cada semana hasta cero al final de la fase 2 |
 | `main` roto | `gh run list --branch main --limit 10` | ningún rojo; si lo hay, se revierte el mismo día |
 
 Y las salidas de fase, tal cual las define el plan: fase 1 termina cuando el iMac recibe lecturas al minuto e importa CSV sin duplicar, y en la MacBook una comida escrita en el chat simulado aparece con rangos; fase 2 cuando las cuatro preguntas del enunciado responden contra fakes en la MacBook y `insights` real pasa su contrato en el iMac; fase 3 cuando usas la app a diario desde el teléfono y solo abres el ordenador para el CSV de respaldo.

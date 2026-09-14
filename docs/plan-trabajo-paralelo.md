@@ -6,8 +6,8 @@ Versión 0.2 · 13 de septiembre de 2026 · Dos máquinas (MacBook e iMac), vari
 
 1. **Git es el único canal.** Los agentes de una máquina no hablan con los de la otra: se comunican por contratos en `core`, por el contrato REST en `docs/api/openapi.yaml`, por issues en GitHub, por PRs pequeñas y por un CI que compila y prueba todo en cada PR. Lo que no está en el repositorio no existe.
 2. **Un módulo, un dueño a la vez.** Cada módulo Maven pertenece a una máquina y, dentro de ella, a un agente. Nadie edita archivos fuera de su módulo salvo por una PR de contrato.
-3. **Lo compartido es contrato y cambia primero.** `core` (tipos, puertos, eventos, utilidades puras), `core-testing` (fakes y tests de contrato), `schema` (migraciones) y `openapi.yaml`. Se modifican con PRs pequeñas etiquetadas `contract`, sin código de feature, que se mergean antes que las features que las usan.
-4. **Si necesitas algo del otro lado que no existe, abre tú la PR de contrato con el puerto y su fake, y sigue contra el fake.** Nunca implementes el módulo del otro. La app siempre arranca porque cada puerto tiene un *stub* hasta que llega la implementación real.
+3. **Lo compartido es contrato y cambia primero.** `core` (tipos, adaptadores, eventos, utilidades puras), `core-testing` (fakes y tests de contrato), `schema` (migraciones) y `openapi.yaml`. Se modifican con PRs pequeñas etiquetadas `contract`, sin código de feature, que se mergean antes que las features que las usan.
+4. **Si necesitas algo del otro lado que no existe, abre tú la PR de contrato con el adaptador y su fake, y sigue contra el fake.** Nunca implementes el módulo del otro. La app siempre arranca porque cada adaptador tiene un *stub* hasta que llega la implementación real.
 5. **Main siempre verde, ramas de horas, no de días.** Rebase sobre `main` al empezar, PR de menos de 400 líneas al terminar (los archivos de datos no cuentan), squash, y a la siguiente.
 
 ---
@@ -18,8 +18,8 @@ El iMac es el servidor de "producción personal" y tiene al lado la base de dato
 
 | Módulo | Dueño | Contratos que consume | Qué entrega |
 |---|---|---|---|
-| `core` | humano (por PRs de contrato que abren los agentes) | — | tipos de valor, enums, puertos, eventos de dominio, utilidades puras |
-| `core-testing` | humano (ídem) | — | fakes de cada puerto, tests de contrato abstractos, constructores, entradas de curvas sintéticas |
+| `core` | humano (por PRs de contrato que abren los agentes) | — | tipos de valor, enums, adaptadores, eventos de dominio, utilidades puras |
+| `core-testing` | humano (ídem) | — | fakes de cada adaptador, tests de contrato abstractos, constructores, entradas de curvas sintéticas |
 | `schema` | humano el baseline; cada módulo su carpeta | — | todas las migraciones Flyway, en carpetas por módulo |
 | `api` | humano | todos | aplicación Spring Boot que cablea los módulos, autoconfiguración de stubs, `application.yml`, Flyway, `docker-compose`, CI, servir la web |
 | `cgm` | iMac · agente A | — | `NightscoutAdapter`, `LibreViewCsvAdapter`, ingesta, reversión de lotes, endpoints `/cgm/*`; publica `ReadingsIngested` |
@@ -51,7 +51,7 @@ Maven multi-módulo. La dirección de las dependencias la impone el build: un m�
 ```
 glucurvia/
 ├── pom.xml                      # padre: versiones compartidas; lo edita solo el humano
-├── glucurvia-core/              # tipos, puertos, eventos, utilidades puras; SIN Spring, SIN JPA, SIN I/O
+├── glucurvia-core/              # tipos, adaptadores, eventos, utilidades puras; SIN Spring, SIN JPA, SIN I/O
 ├── glucurvia-core-testing/      # fakes, tests de contrato abstractos, constructores, curvas (scope test en módulos)
 ├── glucurvia-schema/            # solo recursos: db/migration/<módulo>/V<timestamp>__<desc>.sql
 ├── glucurvia-cgm/
@@ -76,7 +76,7 @@ flowchart TB
   JR["journal · MacBook"] --> CORE
   NU["nutrition · MacBook"] --> CORE
   AS["assistant · MacBook"] --> CORE
-  CORE["core<br/>tipos · puertos · eventos · utilidades puras"]
+  CORE["core<br/>tipos · adaptadores · eventos · utilidades puras"]
   SCH["schema<br/>migraciones"] -. test .-> CGM & GLY & INS & JR & NU & AS
   API --> SCH
   WEB["web · MacBook"] -. openapi.yaml .-> API
@@ -84,11 +84,11 @@ flowchart TB
 
 Reglas de dependencia:
 
-- Ningún módulo depende de otro módulo salvo de `core` (compilación) y de `core-testing` y `schema` (tests). Si `assistant` necesita comidas, no importa `journal`: usa el puerto `EventJournal` de `core`, que `journal` implementa y `api` cablea.
-- Las llamadas entre módulos son de dos tipos. **Consultas** por puerto: interfaz en `core`, implementación `@Service` en el módulo dueño. **Disparadores** por evento de dominio: record en `core`, publicado con `ApplicationEventPublisher` por el emisor; el receptor escucha con `@Async @TransactionalEventListener(phase = AFTER_COMMIT)`. Nunca un listener síncrono: un fallo en `glycemic` (iMac) revertiría la transacción de ingesta de `cgm`, y un fallo en `glycemic` rompería el registro de comidas de `journal` (MacBook). Lo que un listener pierda lo recoge el reconciliador `@Scheduled` del diseño.
+- Ningún módulo depende de otro módulo salvo de `core` (compilación) y de `core-testing` y `schema` (tests). Si `assistant` necesita comidas, no importa `journal`: usa el adaptador `EventJournal` de `core`, que `journal` implementa y `api` cablea.
+- Las llamadas entre módulos son de dos tipos. **Consultas** por adaptador: interfaz en `core`, implementación `@Service` en el módulo dueño. **Disparadores** por evento de dominio: record en `core`, publicado con `ApplicationEventPublisher` por el emisor; el receptor escucha con `@Async @TransactionalEventListener(phase = AFTER_COMMIT)`. Nunca un listener síncrono: un fallo en `glycemic` (iMac) revertiría la transacción de ingesta de `cgm`, y un fallo en `glycemic` rompería el registro de comidas de `journal` (MacBook). Lo que un listener pierda lo recoge el reconciliador `@Scheduled` del diseño.
 - `core` no tiene Spring, JPA ni I/O; sí tiene lógica pura compartida (`Series` con sus operaciones, `Resampler`, conversiones de unidades). Si dos módulos necesitan la misma utilidad y es pura, va a `core` por PR de contrato; si tiene I/O, no se comparte: cada módulo la tiene.
 - Las entidades JPA son privadas de cada módulo. Entre módulos solo circulan records de `core`.
-- Cada puerto de `core` tiene un **stub** en `api`: una autoconfiguración (`META-INF/spring/…AutoConfiguration.imports`) con un bean `@ConditionalOnMissingBean` por puerto, que envuelve el fake de `core-testing`. Tiene que ser autoconfiguración y no una `@Configuration` normal, porque solo así Spring la evalúa después de los `@Service` reales. Al arrancar, `api` escribe en el log qué puertos siguen en stub; con el perfil `prod` activo, si queda alguno, la aplicación no arranca.
+- Cada adaptador de `core` tiene un **stub** en `api`: una autoconfiguración (`META-INF/spring/…AutoConfiguration.imports`) con un bean `@ConditionalOnMissingBean` por adaptador, que envuelve el fake de `core-testing`. Tiene que ser autoconfiguración y no una `@Configuration` normal, porque solo así Spring la evalúa después de los `@Service` reales. Al arrancar, `api` escribe en el log qué adaptadores siguen en stub; con el perfil `prod` activo, si queda alguno, la aplicación no arranca.
 
 ---
 
@@ -100,7 +100,7 @@ Reglas de dependencia:
 | `core`, `core-testing`, `schema`, `openapi.yaml` | El contrato: qué existe, con qué firma, cómo se simula, qué tablas hay, qué devuelve cada endpoint. | agentes que consumen o implementan |
 | Issues de GitHub | Una tarea por issue, etiquetada por módulo, máquina y fase. El agente lee su issue al empezar y comenta al terminar: qué hizo, qué no, qué contrato necesita. Es el tablero. | humano y agentes |
 | PRs con plantilla (apéndice B) | Cómo se hizo y cómo se probó; si es contrato; qué migraciones añade. | humano |
-| CI en GitHub Actions (apéndice C) | Formato, compilación y pruebas de **todos** los módulos en cada PR, más la deriva del OpenAPI. Es la única forma de que un agente del iMac sepa que no rompió a uno de la MacBook. | todos, automáticamente |
+| CI en GitHub Actions (apéndice C) | Formato, compilación y pruebas de **todos** los módulos en cada PR, más la deriva del OpenAPI (un test de `api` falla si hay un endpoint implementado que no está en el contrato y lista los pendientes). Es la única forma de que un agente del iMac sepa que no rompió a uno de la MacBook. | todos, automáticamente |
 | Protección de `main` | Solo se entra por PR con CI verde. Sin exigir aprobaciones: con una sola cuenta de GitHub no podrías aprobar tus propias PRs. | GitHub |
 | Comentario de cierre en el issue | El "informe" del agente. Sustituye a cualquier chat. | humano y el agente del otro lado |
 
@@ -114,11 +114,13 @@ Dos refuerzos baratos: antes de que el humano mire una PR, un agente le pasa `/c
 
 ## 4. Librerías compartidas: la política de `core`
 
+**Vocabulario.** Un *adaptador* es una interfaz en `core` que un módulo implementa con un `@Service` y otros consumen, con tres implementaciones intercambiables: la real, el fake de `core-testing` y el stub de `api`. Las clases `NightscoutAdapter` o `LibreViewCsvAdapter` de `cgm` son la misma idea a escala de módulo: implementaciones intercambiables de su interfaz interna `CgmSourceAdapter`.
+
 1. **Solo lo compartido se comparte.** Si dos módulos necesitan lo mismo, va a `core` (si es puro) o se duplica (si tiene I/O). Si solo lo necesita uno, se queda en ese módulo aunque parezca genérico.
 2. **Cambios aditivos por defecto.** Añadir un record, un campo con valor por defecto, un método `default` en la interfaz. Quitar o renombrar exige una PR de contrato con los dos lados adaptados en PRs inmediatamente posteriores, el mismo día.
 3. **Una PR de contrato contiene exactamente**: la interfaz o el record en `core`, el fake y el test de contrato abstracto en `core-testing`, y el bean stub en `api`. Sin lógica de negocio. Se revisa mirando la firma: ¿la puede implementar el dueño? ¿la puede consumir el otro? Se mergea antes que cualquier feature que la use.
 4. **El consumidor abre la PR de contrato y apila su feature encima.** Rama `contract/<qué>` desde `main`, PR; rama `feat/…` creada **desde** `contract/<qué>`, donde sigue trabajando contra el fake. Cuando el contrato se mergea (squash), `git rebase --onto main contract/<qué> feat/…`. El dueño implementa cuando le toque; nadie espera a nadie.
-5. **Fake y real pasan el mismo test.** `core-testing` tiene por puerto una clase abstracta `AbstractXxxContract` con los casos que definen el comportamiento (qué devuelve con n < 5, qué pasa sin lecturas, etc.). El fake la extiende en `core-testing`; la implementación real la extiende en su módulo. Así la fase 3 no descubre que el fake "mentía".
+5. **Fake y real pasan el mismo test.** `core-testing` tiene por adaptador una clase abstracta `AbstractXxxContract` con los casos que definen el comportamiento (qué devuelve con n < 5, qué pasa sin lecturas, etc.). El fake la extiende en `core-testing`; la implementación real la extiende en su módulo. Así la fase 3 no descubre que el fake "mentía".
 6. **Sincronía por `main`, no por versiones.** `core` no se publica a ningún repositorio de artefactos: es un módulo del mismo build. Rebase sobre `main` al empezar cada tarea; si `core` cambió, compilar antes de seguir.
 7. **Versiones de librerías**: en el `pom.xml` del módulo mientras solo la use ese módulo; cuando la usen dos, sube al `dependencyManagement` del padre por PR de contrato. Así un agente no se bloquea por añadir una dependencia.
 8. **Sin Lombok**: records y clases planas. Dos máquinas y cinco agentes con estilos distintos se pisan en los diffs; el formateador (6.3) y esta regla lo evitan.
@@ -131,20 +133,20 @@ Dos refuerzos baratos: antes de que el humano mire una PR, un agente le pasa `/c
 | valor | `ExtractedMeal`, `ExtractedItem` (la salida del LLM del diseño 8.4) y `EstimatedMeal`, `EstimatedItem` (con rangos, confianza, `macro_source`) | core | assistant, nutrition, journal | son la frontera entre el LLM, el estimador y el registro |
 | valor | `MealEvent(eventId, startedAt, localTz, timeConfidence, carbsG, dominantFoodRefId, tags)`, `ContextEvent` | core | glycemic, insights | lo que `insights` necesita para el ruido propio va aquí, no en otra consulta |
 | enum | `ReadingType`, `SeriesSource`, `EventType`, `TimeConfidence`, `Quality`, `MacroSource` | core | todos | según el diseño (3, 6) |
-| puerto | `GlucoseSeriesReader` | cgm | glycemic, insights, assistant | `Series between(UserId, Instant, Instant)`; `Optional<Reading> latest(UserId)` |
-| puerto | `CgmSyncPort` | cgm | assistant | `SyncResult syncNow(UserId, Duration timeout)` |
-| puerto | `MealEventReader` | journal | glycemic, insights | `List<MealEvent> mealsBetween(...)`; `List<ContextEvent> contextBetween(...)` |
-| puerto | `EventJournal` | journal | assistant | `Event log(NewEvent)`; `Event update(EventId, EventPatch)`; `List<Event> find(EventQuery)` |
-| puerto | `NutrientEstimator` | nutrition | assistant | `EstimatedMeal estimate(ExtractedMeal, UserId)`; `void rememberCorrection(UserId, CorrectedItem)` |
-| puerto | `GlycemicResponseReader` | glycemic | insights, assistant | `Optional<GlycemicResponse> forMeal(EventId)` |
-| puerto | `InsightsQueries` | insights | assistant | `List<MealSummary> meals(MealFilter)`; `Comparison compare(MealFilter, MealFilter, Metric)`; `GlucoseSummary summary(UserId, LocalDate, LocalDate)` |
+| adaptador | `GlucoseSeriesReader` | cgm | glycemic, insights, assistant | `Series between(UserId, Instant, Instant)`; `Optional<Reading> latest(UserId)` |
+| adaptador | `CgmSyncPort` | cgm | assistant | `SyncResult syncNow(UserId, Duration timeout)` |
+| adaptador | `MealEventReader` | journal | glycemic, insights | `List<MealEvent> mealsBetween(...)`; `List<ContextEvent> contextBetween(...)` |
+| adaptador | `EventJournal` | journal | assistant | `Event log(NewEvent)`; `Event update(EventId, EventPatch)`; `List<Event> find(EventQuery)` |
+| adaptador | `NutrientEstimator` | nutrition | assistant | `EstimatedMeal estimate(ExtractedMeal, UserId)`; `void rememberCorrection(UserId, CorrectedItem)` |
+| adaptador | `GlycemicResponseReader` | glycemic | insights, assistant | `Optional<GlycemicResponse> forMeal(EventId)` |
+| adaptador | `InsightsQueries` | insights | assistant | `List<MealSummary> meals(MealFilter)`; `Comparison compare(MealFilter, MealFilter, Metric)`; `GlucoseSummary summary(UserId, LocalDate, LocalDate)` |
 | evento | `ReadingsIngested(userId, from, to, source)` | cgm | glycemic | dispara recomputación |
 | evento | `EventLogged(userId, eventId, type, startedAt)`, `EventUpdated(...)` | journal | glycemic, nutrition | recomputación; aprendizaje de alias |
 | fakes + contratos | `InMemoryGlucoseSeries`, `FakeMealEvents`, `FakeEventJournal`, `FakeNutrientEstimator`, `FakeInsights` y sus `Abstract…Contract`; constructores `aMeal()`, `aCurve()`; entradas de 8–10 curvas sintéticas (sin valores esperados: esos los produce `glycemic`) | core-testing | tests de todos | comportamiento simple y determinista |
 
 Quién orquesta el registro de una comida: `assistant` llama a `NutrientEstimator.estimate` y después a `EventJournal.log` con la comida ya estimada; `journal` guarda lo que recibe y no llama al estimador. Una corrección sigue el mismo camino más `rememberCorrection`.
 
-El puerto hacia Claude (`LlmGateway`) **no** va en `core`: solo lo usa `assistant`, así que vive allí, con un fake propio para sus tests. Ningún test del repositorio llama a la API de Claude: sin secreto en CI, una prueba así pondría `main` en rojo para las dos máquinas. La evaluación con el modelo real es un job manual (apéndice C).
+El adaptador hacia Claude (`LlmGateway`) **no** va en `core`: solo lo usa `assistant`, así que vive allí, con un fake propio para sus tests. Ningún test del repositorio llama a la API de Claude: sin secreto en CI, una prueba así pondría `main` en rojo para las dos máquinas. La evaluación con el modelo real es un job manual (apéndice C).
 
 ---
 
@@ -180,7 +182,7 @@ Una sola PostgreSQL y seis módulos escribiendo migraciones es el segundo punto 
 
 ### 5.4 La excepción de `insights`
 
-`insights` es un módulo de **solo lectura** que consulta con SQL las tablas de `glycemic`, `journal` y `cgm` para agregados (percentiles, medianas, ruido propio). Pasar esos agregados por puertos Java sería absurdo. A cambio: no escribe nunca, y cualquier cambio de columna en las tablas que lee es PR de contrato (5.2), de modo que el CI de `insights` avisa antes de que llegue a `main`.
+`insights` es un módulo de **solo lectura** que consulta con SQL las tablas de `glycemic`, `journal` y `cgm` para agregados (percentiles, medianas, ruido propio). Pasar esos agregados por adaptadores Java sería absurdo. A cambio: no escribe nunca, y cualquier cambio de columna en las tablas que lee es PR de contrato (5.2), de modo que el CI de `insights` avisa antes de que llegue a `main`.
 
 ---
 
@@ -201,7 +203,7 @@ Dos agentes en la misma máquina compartiendo el Postgres de `docker-compose.dev
 
 Configuración: cada módulo lee lo suyo con `@ConfigurationProperties(prefix = "glucurvia.<módulo>")` y valores por defecto en código; los valores de entorno llegan por variables (`GLUCURVIA_CGM_NIGHTSCOUT_URL`) sin tocar `application.yml`. El `.env.example` tiene un bloque por módulo que edita su dueño.
 
-Despliegue al iMac: un script de tres líneas que el humano ejecuta al final del día en el clon de prod: `git pull`, `docker compose --profile prod up -d --build`, y comprobar `GET /cgm/status`. El arranque falla si algún puerto sigue en stub (2).
+Despliegue al iMac: un script de tres líneas que el humano ejecuta al final del día en el clon de prod: `git pull`, `docker compose --profile prod up -d --build`, y comprobar `GET /cgm/status`. El arranque falla si algún adaptador sigue en stub (2).
 
 ### 6.3 Mismas herramientas en las dos máquinas
 
@@ -220,9 +222,9 @@ Despliegue al iMac: un script de tres líneas que el humano ejecuta al final del
 Nada se paraleliza antes de esto. Es lo que convierte "trabajar juntos" en algo posible.
 
 1. `pom.xml` padre (Java 21, Spring Boot 3, Maven Wrapper, Spotless) y los diez módulos vacíos que compilan; solo `api` empaqueta jar ejecutable. `api` arranca con `@SpringBootApplication(scanBasePackages = "mx.glucurvia")`, `@EnableAsync`, `@EnableScheduling`, `@EntityScan` y `@EnableJpaRepositories` sobre `mx.glucurvia`, y responde `GET /actuator/health`.
-2. `core` con todos los tipos, enums, puertos, eventos y utilidades de la tabla 4.1. `core-testing` con los fakes, los tests de contrato abstractos, los constructores, las entradas de las curvas sintéticas y la extensión de JUnit con Testcontainers.
+2. `core` con todos los tipos, enums, adaptadores, eventos y utilidades de la tabla 4.1. `core-testing` con los fakes, los tests de contrato abstractos, los constructores, las entradas de las curvas sintéticas y la extensión de JUnit con Testcontainers.
 3. `schema` con el baseline completo del diseño y la fila de `users` sembrada (`America/Mexico_City`, `es-MX`); Flyway en `api` con las carpetas por módulo y `outOfOrder=true`.
-4. Stubs: la autoconfiguración de `api` con un bean `@ConditionalOnMissingBean` por puerto, el informe al arrancar y el fallo con perfil `prod`.
+4. Stubs: la autoconfiguración de `api` con un bean `@ConditionalOnMissingBean` por adaptador, el informe al arrancar y el fallo con perfil `prod`.
 5. `docs/api/openapi.yaml` v0 con los endpoints de la sección 7 del diseño; en `web`, generación de tipos TypeScript y mocks a partir del archivo; en CI, el test de deriva (apéndice C).
 6. `docker-compose.dev.yml` parametrizado por worktree; `docker-compose.yml` con el uploader bajo el perfil `prod`; clon de prod en el iMac.
 7. `.sdkmanrc`, `.nvmrc`, `.editorconfig`, Spotless y Prettier configurados y aplicados una vez a todo.
@@ -309,7 +311,7 @@ Agentes desatendidos en el iMac: la sesión corre en modo de permisos que no pre
 | Conflicto de merge en un módulo | No debería ocurrir con un dueño por módulo. Si ocurre, dos issues del mismo módulo se solaparon: el humano los separa mejor. |
 | Dos migraciones chocan (misma tabla, dos ramas) | Misma causa. Se mergea una, la otra se reescribe con nueva marca de tiempo. |
 | Flyway se queja del checksum en la base local | Se rehizo una migración no mergeada: `docker compose -f docker-compose.dev.yml down -v` y a empezar. Nunca `repair` en el iMac. |
-| La app local no arranca por un bean que falta | Falta el stub del puerto: la PR de contrato estaba incompleta. Se añade el stub en `api`. |
+| La app local no arranca por un bean que falta | Falta el stub del adaptador: la PR de contrato estaba incompleta. Se añade el stub en `api`. |
 | El agente necesita datos reales | Apunta al Nightscout del iMac por Tailscale con el token de lectura, o restaura el `pg_dump` de anoche en su base de worktree. No arranca un segundo uploader (está bajo el perfil `prod`). |
 | El agente quiere "arreglar de paso" algo de otro módulo | No. Abre un issue en ese módulo con lo que vio. |
 | El agente necesita una librería nueva | Versión en el `pom.xml` de su módulo. Si otro módulo ya la tiene, se sube al padre por PR de contrato. |
@@ -384,7 +386,7 @@ Comenta en el issue: qué hiciste, qué no, qué contratos necesitas del otro la
 ## Cómo lo probé
 - [ ] `./mvnw -q spotless:apply verify` en verde
 - [ ] Sin llamadas de red en tests
-- [ ] La implementación real (si la hay) extiende el `Abstract…Contract` del puerto
+- [ ] La implementación real (si la hay) extiende el `Abstract…Contract` del adaptador
 
 ## Issue
 Closes #
@@ -410,8 +412,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '21', cache: maven }
-      - run: ./mvnw -B -q spotless:check verify   # Testcontainers usa el Docker del runner
-      - run: ./mvnw -B -q -pl glucurvia-api springdoc-openapi:generate && git diff --exit-code docs/api/openapi.yaml
+      - run: ./mvnw -B -q verify   # incluye spotless:check y el test de deriva del OpenAPI (OpenApiDriftTest en api)
   web:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: web } }
@@ -485,7 +486,7 @@ Contradicciones de la 0.1 que habrían bloqueado el trabajo:
 - `api`, `docker-compose` y `application.yml` estaban asignados al agente A y a la vez declarados "solo del humano". Ahora `api` es del humano; los controladores viven en cada módulo; `GET /cgm/readings` pasa a `cgm` y el `pg_dump` al humano.
 - La regla 3 del `CLAUDE.md` decía "escribe la firma en tu issue, no la implementes" mientras la sección 4 decía "el consumidor abre la PR de contrato". Ahora el consumidor abre la PR de contrato y apila su feature encima (rama sobre rama, rebase `--onto` tras el squash).
 - `core` "sin lógica" chocaba con "las utilidades compartidas van a `core`" y con `Series`. Ahora `core` admite lógica pura (sin Spring, JPA ni I/O).
-- Los fakes tenían alcance de test, pero la fase 3 hablaba de "quitar los fakes del cableado" y en la fase 1 la app del iMac no habría arrancado sin `MealEventReader`. Ahora hay stubs por puerto en `api`, como autoconfiguración (la única forma de que `@ConditionalOnMissingBean` se evalúe después de los `@Service` reales), con informe al arrancar y fallo en `prod`.
+- Los fakes tenían alcance de test, pero la fase 3 hablaba de "quitar los fakes del cableado" y en la fase 1 la app del iMac no habría arrancado sin `MealEventReader`. Ahora hay stubs por adaptador en `api`, como autoconfiguración (la única forma de que `@ConditionalOnMissingBean` se evalúe después de los `@Service` reales), con informe al arrancar y fallo en `prod`.
 - "Cada módulo prueba solo sus migraciones" era imposible: `glycemic_responses → meals → events → users`, `meal_items → food_references`, `events → conversation_messages`. Ahora hay un módulo `schema` con el baseline completo del diseño y carpetas por módulo, y todos los tests aplican el esquema entero.
 - `outOfOrder=true` "en desarrollo" ignoraba que el orden de merge también difiere del de las marcas de tiempo en el iMac. Ahora es global, y se explicita el invariante que lo hace seguro (cada módulo toca solo sus tablas; alterar columnas es contrato).
 - `conversations` era de `journal` pero la escribe `assistant`; `user_food_aliases` era de `journal` pero la lee `nutrition` en cada estimación; `NutrientEstimator` tenía dos consumidores sin decir quién orquesta. Ahora `assistant` tiene las conversaciones, `nutrition` los alias, y `assistant` orquesta estimar → registrar.

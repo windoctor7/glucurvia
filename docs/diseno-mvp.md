@@ -10,7 +10,7 @@ Versión 0.5.1 · 13 de septiembre de 2026 · MVP de uso personal en Ciudad de M
 | Conversación, no formularios | Todo lo que el usuario dice entra como texto libre y se convierte en eventos estructurados. Máximo una pregunta de aclaración por mensaje, y solo si cambia mucho el resultado. |
 | Observación ≠ estimación ≠ inferencia | Cada dato lleva su tipo epistémico en el modelo (lectura medida, nutriente estimado con rango, métrica derivada con calidad, inferencia narrativa con n). El agente responde con esa misma separación, dosificada según el tipo de pregunta. |
 | El LLM interpreta y narra; nunca calcula ni decide | Las métricas glucémicas, las comparaciones, la confianza de las estimaciones y la política de aclaración se calculan en Java/SQL con versión. El LLM recibe números y los explica. |
-| CGM desacoplado y casi en tiempo real | Un puerto `CgmSourceAdapter` con tres implementaciones en el MVP: Nightscout (pull local cada minuto y en cada mensaje; Nightscout a su vez recibe de LibreLinkUp mediante un uploader de la comunidad), CSV de LibreView (respaldo e historial) y manual. Otros fabricantes son adaptadores futuros. |
+| CGM desacoplado y casi en tiempo real | Una interfaz de adaptador `CgmSourceAdapter` con tres implementaciones en el MVP: Nightscout (pull local cada minuto y en cada mensaje; Nightscout a su vez recibe de LibreLinkUp mediante un uploader de la comunidad), CSV de LibreView (respaldo e historial) y manual. Otros fabricantes son adaptadores futuros. |
 | Sin sobreingeniería | Monolito en Spring Boot, una sola PostgreSQL, sin colas ni microservicios. Nightscout se opera como producto ya hecho, no como código propio. Se añade infraestructura solo cuando una medición lo justifique. |
 | No es un médico | Sin diagnóstico, sin dosis, sin umbrales clínicos como veredicto. Analiza patrones del propio usuario. Es una regla de diseño y de prompt, no un análisis legal. |
 | Móvil primero | Se usa desde el teléfono: se registra la comida y la curva llega sola en minutos. El CSV solo se sube de vez en cuando, desde el ordenador, como respaldo. |
@@ -50,12 +50,12 @@ flowchart LR
 
 | Decisión | Elección MVP | Razón |
 |---|---|---|
-| Forma del backend | Monolito modular: un módulo Maven por dominio, con `core` como único módulo compartido (tipos, puertos, eventos) y `api` cableando el resto; ver `docs/plan-trabajo-paralelo.md` | Un despliegue y transacciones simples; el build impone las fronteras entre módulos, lo que permite que varios agentes en dos máquinas trabajen en paralelo sin pisarse. |
-| Bordes hexagonales | Solo en tres puertos: `CgmSourceAdapter`, `LlmGateway`, `FoodCatalog` | Son los tres puntos con proveedores externos o intercambiables. El resto es código normal. |
+| Forma del backend | Monolito modular: un módulo Maven por dominio, con `core` como único módulo compartido (tipos, adaptadores, eventos) y `api` cableando el resto; ver `docs/plan-trabajo-paralelo.md` | Un despliegue y transacciones simples; el build impone las fronteras entre módulos, lo que permite que varios agentes en dos máquinas trabajen en paralelo sin pisarse. |
+| Interfaces de adaptador | Solo en tres: `CgmSourceAdapter`, `LlmGateway`, `FoodCatalog` | Son los tres puntos con proveedores externos o intercambiables. El resto es código normal. |
 | Lecturas casi en tiempo real | Nightscout como capa de ingesta: su uploader lee de LibreLinkUp cada minuto y nuestra app lee de la API de Nightscout cada minuto y en cada mensaje del chat; CSV solo como respaldo | Ver 4.4. La parte frágil (la API no oficial de Abbott) la mantiene la comunidad; la API de Nightscout es estable desde hace años; el panel en tiempo real y las alarmas vienen gratis. Si algo se rompe, el CSV recupera el hueco. |
 | Base de datos | PostgreSQL 17, una instancia, `docker-compose` en local y un VPS pequeño o gestionado barato para "producción personal" | Ver 1.3. Sin particionado ni TimescaleDB: con 100–300 mil lecturas al año la tabla plana sirve la consulta caliente en menos de un milisegundo durante décadas. |
 | Trabajo asíncrono | `@Async` + recomputación idempotente + un `@Scheduled` reconciliador | La única tarea pesada es recomputar respuestas glucémicas tras un import. |
-| LLM | Claude vía SDK Java, tras el puerto `LlmGateway` | Structured outputs con esquema derivado de records Java; tool use con `strict: true` para argumentos válidos. |
+| LLM | Claude vía SDK Java, tras el adaptador `LlmGateway` | Structured outputs con esquema derivado de records Java; tool use con `strict: true` para argumentos válidos. |
 | Modelo | `claude-opus-5` para chat, análisis y extracción | Un solo modelo simplifica prompts, caché y evaluación. Medir `claude-sonnet-5` en extracción cuando exista el set de 9.6. |
 | Frontend | Web responsiva móvil-primero, instalable en pantalla de inicio (React + Vite + TypeScript) | Ver 1.4. |
 | Usuarios y acceso | Una fila en `users` sembrada por Flyway (`America/Mexico_City`, `es-MX`); una contraseña única en Spring Security o Tailscale / Cloudflare Access delante | Sin registro, sin magic link, sin correo. `user_id` se conserva en las tablas porque cuesta 16 bytes por fila y quitarlo costaría una migración completa el día que entre un conocido. |
@@ -350,7 +350,7 @@ where user_id = :u and reading_type = :primary
   and ts >= now() - interval '14 days' and not is_clipped;
 ```
 
-### 4.3 Puerto de adaptadores
+### 4.3 Interfaz de adaptadores CGM
 
 ```java
 public interface CgmSourceAdapter {
@@ -366,7 +366,7 @@ public record NormalizedImport(List<GlucoseSample> samples, int detectedCadenceS
                                List<ParseWarning> warnings) {}
 ```
 
-Tres implementaciones en el MVP: `NightscoutAdapter` (fuente principal, 4.4), `LibreViewCsvAdapter` (respaldo e historial, 4.5) y `ManualAdapter` (el usuario dice "mi glucosa está en 110" en el chat, `reading_type = MANUAL`, tiempo APPROX). Un único `CgmIngestionService` recibe `NormalizedImport` de cualquiera y hace lo mismo siempre: deduplicar por la PK natural, insertar, y encolar la recomputación de las comidas cuyo rango temporal quedó cubierto. Los adaptadores futuros (Dexcom, HealthKit, cliente propio de LibreLinkUp) están en el apéndice; el puerto ya los admite.
+Tres implementaciones en el MVP: `NightscoutAdapter` (fuente principal, 4.4), `LibreViewCsvAdapter` (respaldo e historial, 4.5) y `ManualAdapter` (el usuario dice "mi glucosa está en 110" en el chat, `reading_type = MANUAL`, tiempo APPROX). Un único `CgmIngestionService` recibe `NormalizedImport` de cualquiera y hace lo mismo siempre: deduplicar por la PK natural, insertar, y encolar la recomputación de las comidas cuyo rango temporal quedó cubierto. Los adaptadores futuros (Dexcom, HealthKit, cliente propio de LibreLinkUp) están en el apéndice; la interfaz ya los admite.
 
 ### 4.4 Nightscout: lecturas casi en tiempo real
 
@@ -915,7 +915,7 @@ Lo que las revisiones anteriores diseñaron y se aparca hasta que entre el prime
 - **Fuente principal: LibreLinkUp.** El autor quiere el proceso "muy cerca del real": al decirle al agente "estoy comiendo X", los datos de glucosa deben estar al día. Descargar el CSV de LibreView de forma automática exigiría automatizar un navegador con inicio de sesión (frágil, lento) y aun así el CSV solo trae históricas cada 5 o 15 min. La API de LibreLinkUp (la app de seguidores de Abbott, disponible en México) da la lectura actual y las últimas 12 horas con una llamada HTTPS. Nueva sección 4.4: configuración con una cuenta seguidora propia, pull en cada mensaje (≤ 5 s) y sondeo cada 5 min, latencia real de 1–3 min, riesgos de API no oficial, alternativa xDrip+/Juggluco en Android.
 - **El CSV pasa a respaldo e historial** (4.5): carga inicial y huecos de más de 12 h.
 - **Respuestas provisionales.** Mientras la ventana de 4 h de una comida está abierta, la respuesta glucémica se recomputa en cada pull con la bandera `IN_PROGRESS` y el agente la narra como provisional (6.3). Al registrar una comida, el agente menciona la glucosa preprandial y su tendencia (8.3).
-- **Tabla nueva** `cgm_pull_state`; endpoints `POST /cgm/sync` y `GET /cgm/status`; método `pull` en el puerto de adaptadores.
+- **Tabla nueva** `cgm_pull_state`; endpoints `POST /cgm/sync` y `GET /cgm/status`; método `pull` en la interfaz de adaptadores CGM.
 - **Roadmap**: el atajo del día 1 empieza por probar LibreLinkUp con la cuenta y región reales; fase 1 incluye el adaptador y el sondeo; total ~170 h.
 
 ### Versión 0.3 (tercera revisión: alcance personal, base de datos, móvil)
