@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { marked } = require('marked');
 
-const [,, srcPath, outPath] = process.argv;
+const [,, srcPath, outPath, pageTitle, eyebrowText] = process.argv;  // título y etiqueta opcionales
 const md = fs.readFileSync(srcPath, 'utf8');
 
 const slug = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -38,7 +38,8 @@ const body = marked.parse(lines.slice(3).join('\n'));
 
 const tocHtml = toc.map(t => `<li><a href="#${t.id}">${t.text}</a></li>`).join('\n');
 
-const html = `<title>Diseño MVP Seguimiento Metabólico</title>
+const isDesign = !pageTitle;
+const html = `<title>${pageTitle || 'Diseño MVP Seguimiento Metabólico'}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
@@ -127,14 +128,14 @@ html { scroll-behavior: smooth; }
 
 <div class="page">
   <header class="doc">
-    <p class="eyebrow">Documento de diseño · MVP</p>
-    <h1>${title.replace(' — Diseño del MVP', '')}</h1>
+    <p class="eyebrow">${eyebrowText || 'Documento de diseño · MVP'}</p>
+    <h1>${title.replace(' — Diseño del MVP', '').replace('Glucurvia — ', '')}</h1>
     <p class="meta">${meta}</p>
-    <ul class="legend">
+${isDesign ? `    <ul class="legend">
       <li>Observación: lecturas medidas, texto del usuario</li>
       <li class="est">Estimación: nutrientes con rango y confianza</li>
       <li class="inf">Inferencia: patrones con n, calidad y confusores</li>
-    </ul>
+    </ul>` : ''}
   </header>
   <nav class="toc" aria-label="Secciones">
     <h2>Secciones</h2>

@@ -1,6 +1,6 @@
 # Glucurvia — Diseño del MVP
 
-Versión 0.5 · 13 de septiembre de 2026 · MVP de uso personal en Ciudad de México, móvil primero, glucosa casi en tiempo real con Nightscout como capa de ingesta. Lo recortado para uso personal está en el apéndice (sección 14) y los cambios en la 15.
+Versión 0.5.1 · 13 de septiembre de 2026 · MVP de uso personal en Ciudad de México, móvil primero, glucosa casi en tiempo real con Nightscout como capa de ingesta. Lo recortado para uso personal está en el apéndice (sección 14) y los cambios en la 15.
 
 ## 0. Principios que gobiernan el diseño
 
@@ -50,7 +50,7 @@ flowchart LR
 
 | Decisión | Elección MVP | Razón |
 |---|---|---|
-| Forma del backend | Monolito modular (un paquete por dominio, servicios de aplicación como frontera interna) | Un desarrollador, un despliegue, transacciones simples. Los módulos ya delimitan futuros servicios si hiciera falta. |
+| Forma del backend | Monolito modular: un módulo Maven por dominio, con `core` como único módulo compartido (tipos, puertos, eventos) y `api` cableando el resto; ver `docs/plan-trabajo-paralelo.md` | Un despliegue y transacciones simples; el build impone las fronteras entre módulos, lo que permite que varios agentes en dos máquinas trabajen en paralelo sin pisarse. |
 | Bordes hexagonales | Solo en tres puertos: `CgmSourceAdapter`, `LlmGateway`, `FoodCatalog` | Son los tres puntos con proveedores externos o intercambiables. El resto es código normal. |
 | Lecturas casi en tiempo real | Nightscout como capa de ingesta: su uploader lee de LibreLinkUp cada minuto y nuestra app lee de la API de Nightscout cada minuto y en cada mensaje del chat; CSV solo como respaldo | Ver 4.4. La parte frágil (la API no oficial de Abbott) la mantiene la comunidad; la API de Nightscout es estable desde hace años; el panel en tiempo real y las alarmas vienen gratis. Si algo se rompe, el CSV recupera el hueco. |
 | Base de datos | PostgreSQL 17, una instancia, `docker-compose` en local y un VPS pequeño o gestionado barato para "producción personal" | Ver 1.3. Sin particionado ni TimescaleDB: con 100–300 mil lecturas al año la tabla plana sirve la consulta caliente en menos de un milisegundo durante décadas. |
@@ -897,6 +897,10 @@ Lo que las revisiones anteriores diseñaron y se aparca hasta que entre el prime
 ---
 
 ## 15. Registro de cambios
+
+### Versión 0.5.1
+
+- 1.1: "un paquete por dominio" pasa a "un módulo Maven por dominio", para que el diseño y el plan de trabajo en paralelo (`docs/plan-trabajo-paralelo.md`) digan lo mismo. Sin cambios funcionales.
 
 ### Versión 0.5 (Nightscout como capa de ingesta)
 
