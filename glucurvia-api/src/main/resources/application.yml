@@ -1,0 +1,32 @@
+# Lo edita solo el humano. Los módulos leen su configuración con
+# @ConfigurationProperties(prefix = "glucurvia.<módulo>") y valores por defecto en código;
+# los valores de entorno llegan por variables (GLUCURVIA_CGM_NIGHTSCOUT_URL, ...).
+spring:
+  application:
+    name: glucurvia
+  datasource:
+    url: jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${POSTGRES_DB:glucurvia}
+    username: ${POSTGRES_USER:glucurvia}
+    password: ${POSTGRES_PASSWORD:glucurvia}
+  flyway:
+    # Una carpeta por módulo dentro de glucurvia-schema; versiones con marca de tiempo (plan, sección 5).
+    locations: classpath:db/migration/core,classpath:db/migration/cgm,classpath:db/migration/journal,classpath:db/migration/nutrition,classpath:db/migration/assistant,classpath:db/migration/glycemic
+    out-of-order: true
+    fail-on-missing-locations: false
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+glucurvia:
+  user-id: 00000000-0000-0000-0000-000000000001
+server:
+  port: ${PORT:8080}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

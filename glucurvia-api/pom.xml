@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>mx.glucurvia</groupId>
+    <artifactId>glucurvia</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>glucurvia-api</artifactId>
+  <name>Glucurvia · api (aplicación Spring Boot que cablea los módulos)</name>
+
+  <dependencies>
+    <dependency><groupId>mx.glucurvia</groupId><artifactId>glucurvia-core</artifactId></dependency>
+    <dependency><groupId>mx.glucurvia</groupId><artifactId>glucurvia-core-testing</artifactId></dependency>
+    <dependency><groupId>mx.glucurvia</groupId><artifactId>glucurvia-schema</artifactId></dependency>
+    <dependency><groupId>mx.glucurvia</groupId><artifactId>glucurvia-cgm</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>mx.glucurvia</groupId><artifactId>glucurvia-glycemic</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>mx.glucurvia</groupId><artifactId>glucurvia-insights</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>mx.glucurvia</groupId><artifactId>glucurvia-journal</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>mx.glucurvia</groupId><artifactId>glucurvia-nutrition</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>mx.glucurvia</groupId><artifactId>glucurvia-assistant</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-jpa</artifactId></dependency>
+    <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-core</artifactId></dependency>
+    <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-database-postgresql</artifactId></dependency>
+    <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><scope>runtime</scope></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+  </dependencies>
+
+  <build>
+    <testResources>
+      <testResource>
+        <directory>src/test/resources</directory>
+      </testResource>
+      <testResource>
+        <!-- docs/api/openapi.yaml es el contrato REST; el test de deriva lo lee desde aquí -->
+        <directory>${project.basedir}/../docs/api</directory>
+        <includes><include>openapi.yaml</include></includes>
+      </testResource>
+    </testResources>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>

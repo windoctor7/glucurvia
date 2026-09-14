@@ -1,0 +1,3 @@
+# Ejecuta `sdk env install` una vez y `sdk env` en cada terminal (o activa sdkman_auto_env=true)
+java=21.0.12-amzn
+maven=3.9.16

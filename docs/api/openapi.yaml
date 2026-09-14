@@ -1,0 +1,665 @@
+openapi: 3.1.0
+info:
+  title: Glucurvia API
+  version: 0.1.0
+  description: |
+    Contrato REST de Glucurvia (diseño, sección 7). Es un contrato compartido: cambia solo por PR
+    etiquetada `contract`. Los tipos de `web/` y sus mocks se generan de este archivo. Un test en
+    `api` comprueba que todo endpoint implementado bajo /api/v1 está aquí.
+servers:
+  - url: /api/v1
+tags:
+  - { name: chat, description: Agente conversacional (módulo assistant) }
+  - { name: cgm, description: Lecturas de glucosa (módulo cgm) }
+  - { name: events, description: Línea de tiempo (módulo journal) }
+  - { name: glycemic, description: Respuesta glucémica (módulo glycemic) }
+  - { name: insights, description: Consultas agregadas (módulo insights) }
+  - { name: me, description: Perfil (módulo api) }
+
+paths:
+  /chat/messages:
+    post:
+      tags: [chat]
+      summary: Enviar un mensaje al agente
+      operationId: postChatMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChatRequest' }
+      responses:
+        '200':
+          description: Respuesta del agente y eventos creados o actualizados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatResponse' }
+  /chat/conversations/{conversationId}/messages:
+    get:
+      tags: [chat]
+      summary: Historial de una conversación
+      operationId: getConversationMessages
+      parameters:
+        - { name: conversationId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        '200':
+          description: Mensajes, del más antiguo al más reciente
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ChatMessage' }
+
+  /cgm/sync:
+    post:
+      tags: [cgm]
+      summary: Forzar un pull a Nightscout ahora
+      operationId: syncCgm
+      responses:
+        '200':
+          description: Resultado del pull; sourceReachable=false si Nightscout no respondió
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncResult' }
+  /cgm/status:
+    get:
+      tags: [cgm]
+      summary: Estado de la fuente de lecturas
+      operationId: getCgmStatus
+      responses:
+        '200':
+          description: Último pull, última lectura, fallos consecutivos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CgmStatus' }
+  /cgm/readings:
+    get:
+      tags: [cgm]
+      summary: Serie de lecturas para gráficos
+      operationId: getReadings
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: resolution, in: query, schema: { type: string, enum: [raw, 5m], default: raw }, description: raw limitado a 31 días }
+      responses:
+        '200':
+          description: Lecturas o rejilla de 5 min con marca observado/interpolado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReadingsResponse' }
+  /cgm/readings/batch:
+    post:
+      tags: [cgm]
+      summary: Lecturas manuales
+      operationId: postReadingsBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/ReadingInput' }
+      responses:
+        '200':
+          description: Lecturas insertadas y duplicadas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportBatch' }
+  /cgm/imports:
+    post:
+      tags: [cgm]
+      summary: Subir un CSV de LibreView (respaldo e historial)
+      operationId: postImport
+      parameters:
+        - { name: timezone, in: query, schema: { type: string }, description: Zona asumida para las horas locales del CSV; por defecto la del usuario }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: Lote procesado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportBatch' }
+        '202':
+          description: Lote grande; se procesa en segundo plano
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportBatch' }
+  /cgm/imports/{batchId}:
+    get:
+      tags: [cgm]
+      summary: Estado de un lote
+      operationId: getImport
+      parameters:
+        - { name: batchId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Lote
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportBatch' }
+    delete:
+      tags: [cgm]
+      summary: Revertir un lote completo
+      operationId: revertImport
+      parameters:
+        - { name: batchId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Lote revertido; se recomputan las comidas afectadas }
+
+  /events:
+    get:
+      tags: [events]
+      summary: Línea de tiempo
+      operationId: listEvents
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/EventType' } }
+      responses:
+        '200':
+          description: Eventos con resumen de comida y calidad de su respuesta
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EventSummary' }
+    post:
+      tags: [events]
+      summary: Alta estructurada sin chat
+      operationId: createEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewEventInput' }
+      responses:
+        '201':
+          description: Evento creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventDetail' }
+  /events/{eventId}:
+    get:
+      tags: [events]
+      summary: Detalle de un evento
+      operationId: getEvent
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Comida con ítems, rangos, supuestos y fuente de cada macro
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventDetail' }
+        '404': { description: No existe }
+    patch:
+      tags: [events]
+      summary: Corrección
+      operationId: patchEvent
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventPatchInput' }
+      responses:
+        '200':
+          description: Evento actualizado; dispara reestimación y recomputación
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventDetail' }
+    delete:
+      tags: [events]
+      summary: Borrado lógico
+      operationId: deleteEvent
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Borrado }
+  /events/{eventId}/glycemic-response:
+    get:
+      tags: [glycemic]
+      summary: Respuesta glucémica de una comida
+      operationId: getGlycemicResponse
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Métricas y puntos de la curva para dibujar
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GlycemicResponseView' }
+        '404': { description: Aún no calculada o el evento no es una comida }
+  /events/{eventId}/glycemic-response/recompute:
+    post:
+      tags: [glycemic]
+      summary: Forzar recálculo
+      operationId: recomputeGlycemicResponse
+      parameters:
+        - { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '202': { description: Recálculo encolado }
+
+  /insights/summary:
+    get:
+      tags: [insights]
+      summary: Resumen diario para la pantalla de inicio
+      operationId: getSummary
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Estadísticos por día y rango personal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GlucoseSummary' }
+
+  /me:
+    get:
+      tags: [me]
+      summary: Perfil
+      operationId: getProfile
+      responses:
+        '200':
+          description: Perfil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+    patch:
+      tags: [me]
+      summary: Actualizar perfil
+      operationId: patchProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfilePatch' }
+      responses:
+        '200':
+          description: Perfil actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+
+components:
+  schemas:
+    EventType:
+      type: string
+      enum: [MEAL, ACTIVITY, SLEEP, STRESS, MEDICATION, ALCOHOL, SYMPTOM, NOTE]
+    MealType:
+      type: string
+      enum: [BREAKFAST, LUNCH, DINNER, SNACK]
+    TimeConfidence:
+      type: string
+      enum: [EXACT, APPROX, INFERRED]
+    Quality:
+      type: string
+      enum: [GOOD, PARTIAL, CONFOUNDED, INSUFFICIENT]
+    SeriesSource:
+      type: string
+      enum: [REALTIME, HISTORIC]
+    ReadingType:
+      type: string
+      enum: [HISTORIC, SCAN, REALTIME, MANUAL, STRIP]
+    MacroSource:
+      type: string
+      enum: [CATALOG, USER_ALIAS, LLM_FALLBACK, LABEL]
+    Range:
+      type: object
+      description: Punto más intervalo plausible (diseño 10.1)
+      required: [point, low, high]
+      properties:
+        point: { type: number }
+        low: { type: number }
+        high: { type: number }
+    EventTime:
+      type: object
+      required: [at, localTz, confidence, uncertaintyMin]
+      properties:
+        at: { type: string, format: date-time }
+        localTz: { type: string, example: America/Mexico_City }
+        confidence: { $ref: '#/components/schemas/TimeConfidence' }
+        uncertaintyMin: { type: integer }
+        basis: { type: string, nullable: true }
+
+    ChatRequest:
+      type: object
+      required: [clientMessageId, text, clientTime, timezone]
+      properties:
+        conversationId: { type: string, format: uuid, nullable: true }
+        clientMessageId: { type: string, format: uuid, description: Lo genera el cliente; un reintento con el mismo id devuelve la respuesta guardada }
+        text: { type: string }
+        clientTime: { type: string, format: date-time }
+        timezone: { type: string }
+    ChatResponse:
+      type: object
+      required: [conversationId, reply, createdEvents, updatedEvents, dataQualityNotes]
+      properties:
+        conversationId: { type: string, format: uuid }
+        reply: { type: string }
+        createdEvents:
+          type: array
+          items: { $ref: '#/components/schemas/EventSummary' }
+        updatedEvents:
+          type: array
+          items: { $ref: '#/components/schemas/EventSummary' }
+        clarification: { type: string, nullable: true }
+        dataQualityNotes:
+          type: array
+          items: { type: string }
+    ChatMessage:
+      type: object
+      required: [id, role, content, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string, enum: [USER, ASSISTANT, TOOL] }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    SyncResult:
+      type: object
+      required: [sourceReachable, newReadings, elapsedMs]
+      properties:
+        sourceReachable: { type: boolean }
+        newReadings: { type: integer }
+        latestReadingTs: { type: string, format: date-time, nullable: true }
+        elapsedMs: { type: integer }
+    CgmStatus:
+      type: object
+      required: [source, consecutiveFailures]
+      properties:
+        source: { type: string, example: NIGHTSCOUT }
+        lastPullAt: { type: string, format: date-time, nullable: true }
+        lastReadingTs: { type: string, format: date-time, nullable: true }
+        minutesSinceLastReading: { type: integer, nullable: true }
+        lastStatus: { type: string, nullable: true }
+        lastError: { type: string, nullable: true }
+        consecutiveFailures: { type: integer }
+    Reading:
+      type: object
+      required: [ts, mgdl, type, clipped]
+      properties:
+        ts: { type: string, format: date-time }
+        mgdl: { type: number }
+        type: { $ref: '#/components/schemas/ReadingType' }
+        clipped: { type: boolean }
+    GridPoint:
+      type: object
+      required: [ts, mgdl, observed]
+      properties:
+        ts: { type: string, format: date-time }
+        mgdl: { type: number }
+        observed: { type: boolean }
+    ReadingsResponse:
+      type: object
+      required: [resolution]
+      properties:
+        resolution: { type: string, enum: [raw, 5m] }
+        readings:
+          type: array
+          items: { $ref: '#/components/schemas/Reading' }
+        grid:
+          type: array
+          items: { $ref: '#/components/schemas/GridPoint' }
+    ReadingInput:
+      type: object
+      required: [ts, value, unit]
+      properties:
+        ts: { type: string, format: date-time, description: ISO-8601 con offset }
+        value: { type: number }
+        unit: { type: string, enum: [MG_DL, MMOL_L] }
+        type: { $ref: '#/components/schemas/ReadingType' }
+    ImportBatch:
+      type: object
+      required: [id, source, status]
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, enum: [LIBREVIEW_CSV, MANUAL] }
+        sourceName: { type: string, nullable: true }
+        assumedTimezone: { type: string, nullable: true }
+        detectedCadenceSec: { type: integer, nullable: true }
+        status: { type: string, enum: [RECEIVED, STORED, REVERTED, FAILED] }
+        rowsTotal: { type: integer, nullable: true }
+        rowsInserted: { type: integer, nullable: true }
+        rowsDuplicate: { type: integer, nullable: true }
+        rowsRejected: { type: integer, nullable: true }
+        rangeStart: { type: string, format: date-time, nullable: true }
+        rangeEnd: { type: string, format: date-time, nullable: true }
+        warnings:
+          type: array
+          items: { type: object, additionalProperties: true }
+        error: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    EventSummary:
+      type: object
+      required: [id, type, time]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/EventType' }
+        time: { $ref: '#/components/schemas/EventTime' }
+        endedAt: { type: string, format: date-time, nullable: true }
+        rawText: { type: string, nullable: true }
+        meal: { $ref: '#/components/schemas/MealSummaryView', nullable: true }
+    MealSummaryView:
+      type: object
+      required: [mealType, carbsG, carbsBand, confidence]
+      properties:
+        mealType: { $ref: '#/components/schemas/MealType' }
+        carbsG: { type: number }
+        carbsBand: { $ref: '#/components/schemas/Range' }
+        confidence: { type: number }
+        foods:
+          type: array
+          items: { type: string }
+        quality: { $ref: '#/components/schemas/Quality', nullable: true }
+        deltaPeakMgdl: { type: number, nullable: true }
+        inProgress: { type: boolean }
+    EventDetail:
+      type: object
+      required: [id, type, time, source, attributes, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/EventType' }
+        time: { $ref: '#/components/schemas/EventTime' }
+        endedAt: { type: string, format: date-time, nullable: true }
+        source: { type: string }
+        rawText: { type: string, nullable: true }
+        messageId: { type: string, format: uuid, nullable: true }
+        attributes: { type: object, additionalProperties: true }
+        meal: { $ref: '#/components/schemas/MealDetail', nullable: true }
+        createdAt: { type: string, format: date-time }
+    MealDetail:
+      type: object
+      required: [mealType, items, totals, carbsBand, carbsWorstCase, confidence, estimatorVersion]
+      properties:
+        mealType: { $ref: '#/components/schemas/MealType' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MealItemDetail' }
+        totals: { $ref: '#/components/schemas/Nutrients' }
+        carbsBand: { $ref: '#/components/schemas/Range' }
+        carbsWorstCase: { $ref: '#/components/schemas/Range' }
+        confidence: { type: number }
+        estimatorVersion: { type: string }
+        clarificationQuestion: { type: string, nullable: true }
+    MealItemDetail:
+      type: object
+      description: Lo que muestra el cajón "¿por qué este número?" (diseño 10.5)
+      required: [raw, foodName, grams, portionEaten, nutrients, carbsRange, confidence, macroSource, assumptions, needsClarification]
+      properties:
+        raw: { type: string }
+        foodName: { type: string }
+        preparation: { type: string, nullable: true }
+        foodRefId: { type: string, format: uuid, nullable: true }
+        quantity: { type: number, nullable: true }
+        unit: { type: string, nullable: true }
+        grams: { $ref: '#/components/schemas/Range' }
+        volumeMl: { type: number, nullable: true }
+        portionEaten: { type: number }
+        nutrients: { $ref: '#/components/schemas/Nutrients' }
+        carbsRange: { $ref: '#/components/schemas/Range' }
+        confidence: { type: number }
+        llmConfidence: { type: number, nullable: true }
+        macroSource: { $ref: '#/components/schemas/MacroSource' }
+        assumptions:
+          type: array
+          items: { type: string }
+        needsClarification: { type: boolean }
+    Nutrients:
+      type: object
+      required: [carbsG, fiberG, proteinG, fatG, kcal]
+      properties:
+        carbsG: { type: number, description: hidratos disponibles, sin fibra }
+        fiberG: { type: number }
+        proteinG: { type: number }
+        fatG: { type: number }
+        kcal: { type: number }
+    NewEventInput:
+      type: object
+      required: [type, time]
+      properties:
+        type: { $ref: '#/components/schemas/EventType' }
+        time: { $ref: '#/components/schemas/EventTime' }
+        endedAt: { type: string, format: date-time, nullable: true }
+        rawText: { type: string, nullable: true }
+        attributes: { type: object, additionalProperties: true }
+        meal: { $ref: '#/components/schemas/MealInput', nullable: true }
+    MealInput:
+      type: object
+      description: Comida ya extraída (mismo esquema que la tool log_events, diseño 8.4); la estima el servidor
+      required: [mealType, items]
+      properties:
+        mealType: { $ref: '#/components/schemas/MealType' }
+        repeatOfEventRef: { type: string, nullable: true }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ExtractedItemInput' }
+    ExtractedItemInput:
+      type: object
+      required: [raw, food, portionEaten]
+      properties:
+        raw: { type: string }
+        food: { type: string }
+        preparation: { type: string, nullable: true }
+        brand: { type: string, nullable: true }
+        quantity: { type: number, nullable: true }
+        unit: { type: string, nullable: true }
+        grams: { $ref: '#/components/schemas/Range', nullable: true }
+        volumeMl: { type: number, nullable: true }
+        portionEaten: { type: number, default: 1 }
+        assumptions:
+          type: array
+          items: { type: string }
+    EventPatchInput:
+      type: object
+      properties:
+        time: { $ref: '#/components/schemas/EventTime', nullable: true }
+        endedAt: { type: string, format: date-time, nullable: true }
+        attributes: { type: object, additionalProperties: true, nullable: true }
+        meal: { $ref: '#/components/schemas/MealInput', nullable: true }
+
+    GlycemicResponseView:
+      type: object
+      required: [mealEventId, algorithmVersion, computedAt, seriesSource, cadenceSec, quality, coveragePct, flags, contextTags, curve]
+      properties:
+        mealEventId: { type: string, format: uuid }
+        algorithmVersion: { type: string }
+        computedAt: { type: string, format: date-time }
+        seriesSource: { $ref: '#/components/schemas/SeriesSource' }
+        cadenceSec: { type: integer }
+        scanFraction: { type: number, nullable: true }
+        quality: { $ref: '#/components/schemas/Quality' }
+        coveragePct: { type: number }
+        maxGapMin: { type: integer, nullable: true }
+        baselineMgdl: { type: number, nullable: true }
+        baselineN: { type: integer }
+        baselineUnstable: { type: boolean }
+        peakMgdl: { type: number, nullable: true }
+        peakAt: { type: string, format: date-time, nullable: true }
+        timeToPeakMin: { type: integer, nullable: true }
+        deltaPeakMgdl: { type: number, nullable: true }
+        g30: { type: number, nullable: true }
+        g60: { type: number, nullable: true }
+        g90: { type: number, nullable: true }
+        g120: { type: number, nullable: true }
+        g180: { type: number, nullable: true }
+        returnToBaselineMin: { type: integer, nullable: true }
+        iauc0to120: { type: number, nullable: true }
+        iauc0to180: { type: number, nullable: true }
+        maxRiseRate: { type: number, nullable: true }
+        maxFallRate: { type: number, nullable: true }
+        minutesAbovePersonalP90: { type: integer, nullable: true }
+        personalP90Mgdl: { type: number, nullable: true }
+        windowEnd: { type: string, format: date-time, nullable: true }
+        flags:
+          type: array
+          items: { type: string }
+        contextTags:
+          type: array
+          items: { type: string }
+        curve:
+          type: array
+          description: Rejilla de 5 min desde −60 hasta el fin de la ventana, para dibujar
+          items: { $ref: '#/components/schemas/GridPoint' }
+
+    GlucoseSummary:
+      type: object
+      required: [from, to, days]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        personalRange: { $ref: '#/components/schemas/PersonalRange', nullable: true }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/DailyStats' }
+    PersonalRange:
+      type: object
+      required: [periodEnd, windowDays, readingsCount]
+      properties:
+        p10Mgdl: { type: number, nullable: true }
+        p50Mgdl: { type: number, nullable: true }
+        p90Mgdl: { type: number, nullable: true }
+        periodEnd: { type: string, format: date }
+        windowDays: { type: integer }
+        readingsCount: { type: integer }
+    DailyStats:
+      type: object
+      required: [day, minutesAbovePersonalP90, coveragePct, mealsLogged]
+      properties:
+        day: { type: string, format: date }
+        meanMgdl: { type: number, nullable: true }
+        p10Mgdl: { type: number, nullable: true }
+        p50Mgdl: { type: number, nullable: true }
+        p90Mgdl: { type: number, nullable: true }
+        minutesAbovePersonalP90: { type: integer }
+        coveragePct: { type: number }
+        mealsLogged: { type: integer }
+
+    Profile:
+      type: object
+      required: [displayName, timezone, glucoseUnit, locale, preferences]
+      properties:
+        displayName: { type: string, nullable: true }
+        timezone: { type: string }
+        glucoseUnit: { type: string, enum: [MG_DL, MMOL_L] }
+        locale: { type: string }
+        preferences: { type: object, additionalProperties: true }
+    ProfilePatch:
+      type: object
+      properties:
+        displayName: { type: string, nullable: true }
+        timezone: { type: string, nullable: true }
+        glucoseUnit: { type: string, enum: [MG_DL, MMOL_L], nullable: true }
+        preferences: { type: object, additionalProperties: true, nullable: true }
