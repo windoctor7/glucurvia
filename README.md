@@ -4,6 +4,7 @@ Seguimiento metabólico conversacional para usuarios de FreeStyle Libre. Uso per
 
 - Diseño completo: [docs/diseno-mvp.md](docs/diseno-mvp.md) (versión 0.5; el registro de cambios está en su sección 15).
 - Plan de trabajo en paralelo (MacBook + iMac, varios agentes): [docs/plan-trabajo-paralelo.md](docs/plan-trabajo-paralelo.md).
+- Guía del humano (rutinas, listas de comprobación y comandos): [docs/guia-del-humano.md](docs/guia-del-humano.md).
 - Versión publicada del diseño: https://claude.ai/code/artifact/497f928b-39bd-4b73-90c4-c51e31e42dfc
 
 ## Día 1 (antes de escribir código)
