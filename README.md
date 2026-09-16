@@ -4,7 +4,9 @@ Seguimiento metabólico conversacional para usuarios de FreeStyle Libre. Uso per
 
 - Diseño completo: [docs/diseno-mvp.md](docs/diseno-mvp.md) (versión 0.5; el registro de cambios está en su sección 15).
 - Plan de trabajo en paralelo (MacBook + iMac, varios agentes): [docs/plan-trabajo-paralelo.md](docs/plan-trabajo-paralelo.md).
-- Guía del humano (rutinas, listas de comprobación y comandos): [docs/guia-del-humano.md](docs/guia-del-humano.md).
+- Guía del humano (máquinas y sesiones, preparación, rutinas y comandos): [docs/guia-del-humano.md](docs/guia-del-humano.md).
+
+Estado: fase 0 completada (etiqueta `skeleton`); fase 1 en curso con los issues #2 a #16.
 
 ## Día 1 (antes de escribir código)
 
