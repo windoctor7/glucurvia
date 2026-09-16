@@ -46,5 +46,11 @@
       <artifactId>glucurvia-schema</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <!-- solo para las pruebas de este módulo: sin esto Testcontainers no puede decir por qué no ve Docker -->
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 </project>

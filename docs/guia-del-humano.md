@@ -17,7 +17,7 @@ Tres cosas que nunca delegas: mergear a `main`, tocar el clon de producción, y 
 Marca cada punto en cada máquina.
 
 - [ ] Git, y `gh auth login` con tu cuenta (`windoctor7`). Comprueba con `gh repo view windoctor7/glucurvia`.
-- [ ] Docker: OrbStack (más ligero) o Docker Desktop. Comprueba con `docker run --rm hello-world`.
+- [ ] Docker: OrbStack (más ligero) o Docker Desktop. Comprueba con `docker run --rm hello-world`. Si Testcontainers dice "Could not find a valid Docker environment" con Docker abierto, mira primero que el motor esté en "running"; la versión de API que pide el cliente ya está fijada en el repositorio (`docker-java.properties` de `core-testing`), así que no hace falta ningún archivo local.
 - [ ] Tailscale instalado y con sesión iniciada; anota el nombre del iMac en la red (`tailscale status`).
 - [ ] JDK 21 con SDKMAN (`sdk env install` dentro del repo lee `.sdkmanrc`) y Node 22 con nvm (`nvm use` lee `.nvmrc`).
 - [ ] Claude Code, la app de escritorio.
